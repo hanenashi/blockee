@@ -1,9 +1,10 @@
 // ==UserScript==
-// @name         Global Anti-Autoplay Toggle
+// @name         Blockee - Global Anti-Autoplay Toggle
 // @namespace    http://tampermonkey.net/
-// @version      2.0
+// @version      2.1
 // @description  Stops videos from aggressively autoplaying globally, with a menu toggle.
 // @match        *://*/*
+// @allFrames    true
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
@@ -14,68 +15,71 @@
 (function() {
     'use strict';
 
-    // Load the saved state (defaults to true/active)
+    // Load state
     let isBlockingActive = GM_getValue('autoplay_blocker_state', true);
     let menuCommandId = null;
 
-    // Function to draw/update the menu button dynamically
     function updateMenu() {
-        // Clear the old menu item if it exists
-        if (menuCommandId !== null) {
-            GM_unregisterMenuCommand(menuCommandId);
-        }
+        if (menuCommandId !== null) GM_unregisterMenuCommand(menuCommandId);
         
-        // Red switch when active (blocking), Green switch when passive (allowed)
-        const menuText = isBlockingActive ? "🔴 Autoplay Blocker: ACTIVE" : "🟢 Autoplay Blocker: PASSIVE";
-        
+        const menuText = isBlockingActive ? "🔴 Blockee: ACTIVE" : "🟢 Blockee: PASSIVE";
         menuCommandId = GM_registerMenuCommand(menuText, () => {
-            // Toggle the state and save it
             isBlockingActive = !isBlockingActive;
             GM_setValue('autoplay_blocker_state', isBlockingActive);
-            
-            // Redraw the menu to reflect the new state
             updateMenu();
-            
-            // Because our block hijacks the native play function at document-start, 
-            // a page reload is required to safely apply or remove the block.
-            if (confirm("Setting saved! The page needs to reload to apply the changes. Reload now?")) {
+            if (confirm("Blockee setting saved! Reload the page to apply?")) {
                 location.reload();
             }
         });
     }
 
-    // Initialize the toggle menu
     updateMenu();
 
-    // If the switch is passive (green), exit here and do not inject the blocker.
+    // Exit if passive
     if (!isBlockingActive) return;
 
-
-    // --- Core Autoplay Blocking Logic ---
+    // --- Core Fortress Logic ---
     let userInteracted = false;
 
     const unlockPlayback = () => {
         userInteracted = true;
         document.removeEventListener('click', unlockPlayback, { capture: true });
         document.removeEventListener('touchstart', unlockPlayback, { capture: true });
+        document.removeEventListener('keydown', unlockPlayback, { capture: true });
     };
 
     document.addEventListener('click', unlockPlayback, { capture: true });
     document.addEventListener('touchstart', unlockPlayback, { capture: true });
+    document.addEventListener('keydown', unlockPlayback, { capture: true });
 
-    // Hijack native media playback
+    // 1. Hijack native .play() method
     const originalPlay = HTMLMediaElement.prototype.play;
-
     HTMLMediaElement.prototype.play = function() {
         if (!userInteracted) {
-            console.log('Global Anti-Autoplay: Blocked rogue autoplay request.');
+            console.log('Blockee: Intercepted rogue .play() call.');
             this.removeAttribute('autoplay');
-            return Promise.reject(new Error("Autoplay prevented by userscript."));
+            return Promise.reject(new Error("Autoplay prevented by Blockee."));
         }
         return originalPlay.apply(this, arguments);
     };
 
-    // Strip autoplay attributes from elements added to the DOM dynamically
+    // 2. Hijack the 'autoplay' property setter (catches video.autoplay = true)
+    Object.defineProperty(HTMLMediaElement.prototype, 'autoplay', {
+        configurable: true,
+        enumerable: true,
+        get: function() { return false; },
+        set: function(val) { console.log('Blockee: Blocked autoplay property setter.'); }
+    });
+
+    // 3. The Nuclear Option: Capture native 'play' events and instantly pause
+    document.addEventListener('play', (e) => {
+        if (!userInteracted && e.target instanceof HTMLMediaElement) {
+            console.log('Blockee: Native autoplay event detected. Forcing pause.');
+            e.target.pause();
+        }
+    }, true); // true = capture phase, fires before the event bubbles
+
+    // 4. Strip attributes from dynamically loaded DOM elements
     const observer = new MutationObserver(() => {
         document.querySelectorAll('video[autoplay], audio[autoplay]').forEach(media => {
             media.removeAttribute('autoplay');
@@ -84,7 +88,7 @@
     
     observer.observe(document.documentElement, { childList: true, subtree: true });
     
-    // Cleanup observer once the user interacts
+    // Cleanup observer once unlocked
     const stopObserver = () => observer.disconnect();
     document.addEventListener('touchstart', stopObserver, { once: true });
     document.addEventListener('click', stopObserver, { once: true });
