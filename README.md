@@ -1,6 +1,6 @@
 # Blockee
 
-**[⬇️ Install Blockee](https://raw.githubusercontent.com/hanenashi/blockee/main/blockee.user.js)**
+**[⬇️ Install Blockee]((https://raw.githubusercontent.com/hanenashi/blockee/main/blockee.user.js))**
 
 **TL;DR:** A global userscript that forcefully stops aggressive video autoplay across all websites. It hijacks the native JavaScript `.play()` method to block videos from starting until you physically interact with the page, and features a quick 🔴/🟢 toggle right in your Tampermonkey menu.
 
