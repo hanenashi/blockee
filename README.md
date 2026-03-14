@@ -1,0 +1,2 @@
+# blockee
+global autoplay stopper
